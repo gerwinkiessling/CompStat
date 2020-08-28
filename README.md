@@ -6,26 +6,12 @@ This is a template for course projects. We use [GitHub Classroom](https://classr
 
 Please ensure that a brief description of your project is included in the [README.md](https://github.com/HumanCapitalAnalysis/template-course-project/blob/master/README.md), which provides a proper citation of your baseline article. Also, please set up the following badges that allow to easily access your project notebook.
 
-<a href="https://nbviewer.jupyter.org/github/HumanCapitalAnalysis/template-course-project/blob/master/example_project.ipynb"
+<a href="https://nbviewer.jupyter.org/github/gerwinkiessling/CompStat/blob/master/Project_Corruption.ipynb"
    target="_parent">
    <img align="center"
   src="https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.png"
       width="109" height="20">
 </a>
-<a href="https://mybinder.org/v2/gh/HumanCapitalAnalysis/template-course-project/master?filepath=example_project.ipynb"
-    target="_parent">
-    <img align="center"
-       src="https://mybinder.org/badge_logo.svg"
-       width="109" height="20">
-</a>
-
-## Reproducibility
-
-To ensure full reproducibility of your project, please try to set up a [Travis CI](https://travis-ci.org) as your continuous integration service. An introductory tutorial for [conda](https://conda.io) and [Travis CI](https://docs.travis-ci.com/) is provided [here](https://github.com/HumanCapitalAnalysis/template-course-project/blob/master/tutorial_conda_travis.ipynb). While not at all mandatory, setting up a proper continuous integration workflow is an extra credit that can improve the final grade.
-
-[![Build Status](https://travis-ci.org/HumanCapitalAnalysis/template-course-project.svg?branch=master)](https://travis-ci.org/HumanCapitalAnalysis/template-course-project)
-
-In some cases you might not be able to run parts of your code on  [Travis CI](https://travis-ci.org) as, for example, the computation of results takes multiple hours. In those cases you can add the result in a file to your repository and load it in the notebook. See below for an example code.
 
 ```python
 # If we are running on TRAVIS-CI we will simply load a file with existing results.
