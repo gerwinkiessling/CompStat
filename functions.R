@@ -18,13 +18,15 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
                          "zpercentpoorpra"="percentage_poor", "zkadesbengkoktotal"="head_salary", "zkadesage"="head_age",
                           "podeszhill"="mountainous", "totalmesjid"="mosques", "audit.x"="audit", 
                          "lndiffeall4mainancil"="ln_diff_items", "z4RABnumsubproj"="subprojects"))
+                         
+    #define continuous covariates
 
     X_cont=as.data.frame(cbind(merged_data$population, merged_data$mosques, merged_data$totalallocation,
                                merged_data$subprojects, merged_data$percentage_poor,
                                merged_data$distance, merged_data$head_education_years, merged_data$head_age,
                                merged_data$head_salary))
     
-    #drawing continuous variables
+    #drawing continuous covariates
 
     mu<-colMeans(X_cont, na.rm=TRUE)
 
@@ -47,6 +49,8 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
 
 
     #clustering and randomization
+    
+    #defining a similarity score
 
     similarity_vars<-c("population", "mosques", "totalallocation", "percentage_poor", "mountainous")
 
@@ -65,10 +69,14 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
 
     min_cluster<-3/4*mean_cluster_size
     max_cluster<-5/4*mean_cluster_size
+    
+    #vector of clusters
 
     cluster_vector<-rep(c(min_cluster, mean_cluster_size, max_cluster), times=N_clusters/3)
 
     simulation_data$subdistrict<-rep(1:N_clusters, times=c(cluster_vector))
+    
+    #randomization by cluster
 
     randomization_subdistricts<-rbinom(size=1, n=N_clusters, 0.48)
 
@@ -79,7 +87,7 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
     }
     simulation_data$audit<-cluster
     
-    #specifying some further cluster variables
+    #specifying some further cluster variables for idiosyncratic shocks and covariates
 
     idiosyncratic_main<-rnorm(mean=-0.05, sd=1, n=N_clusters)
     idiosyncratic_treat<-rnorm(mean=-0.05, sd=1, n=N_clusters)
@@ -103,7 +111,7 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
     
     simulation_data$idiosyncratic_treat<-village_idiosyncratic_treat
 
-    radio<-rtmvnorm(n=N_clusters, mean=1000, sigma=150000, lower=0)
+    radio<-rtmvnorm(n=N_clusters, mean=5, sigma=25, lower=0)
 
     village_radio<-c()
 
@@ -116,7 +124,7 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
 
 
 
-    literacy<-rtmvnorm(n=N_clusters, mean=50000, sigma=300000000, lower=0)
+    literacy<-rtmvnorm(n=N_clusters, mean=0.5, sigma=1, lower=0, upper=1)
 
 
     village_literacy<-c()
@@ -129,7 +137,7 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
     simulation_data$literacy<-village_literacy
 
 
-    legalspending<-rtmvnorm(n=N_clusters, mean=50000, sigma=300000000, lower=0)
+    legalspending<-rtmvnorm(n=N_clusters, mean=500, sigma=90000, lower=0)
 
         village_legalspending<-c()
 
@@ -157,6 +165,8 @@ data_generation<-function(N, N_clusters, model, dataset1, dataset2){
     }
 
     simulation_data$eps<-as.vector(rmvnorm(mean=rep(0, times=N), sigma=covariance_matrix, n=1))
+    
+    #specifying the different dgps
 
     if (model=='simple')  {  
 
@@ -289,6 +299,8 @@ MSE_function<-function(n_test, n_train, N_clusters, n.trees, model_true){
     for (model_est in c('simple', 'medium_misspecified', 'complex', 'medium')){
     
         for (cluster in c('No', 'Yes')){
+        	
+        #growing different forests depending on whether clustered or not
 
         if (cluster=='Yes')    { 
             train_forest_honest<-causal_forest(X_train, simulation_data$ln_diff_items, simulation_data$audit, W.hat=0.48, clusters=simulation_data$subdistrict, mtry=7, min.node.size=5, equalize.cluster.weights=TRUE, num.trees=n.trees, seed=1)
@@ -300,7 +312,7 @@ MSE_function<-function(n_test, n_train, N_clusters, n.trees, model_true){
             train_forest_adaptive<-causal_forest(X_train, simulation_data$ln_diff_items, simulation_data$audit, W.hat=0.48, mtry=7,  min.node.size=5, honesty=FALSE, num.trees=n.trees, seed=1)
             }
 
-
+		#estimating linear models
 
         if (model_est=='simple'){
 
@@ -392,10 +404,12 @@ MSE_function<-function(n_test, n_train, N_clusters, n.trees, model_true){
     coverage_honest[[cluster]]<-mean(CI_honest_lower<=test_data$tau&test_data$tau<=CI_honest_upper)
     coverage_adaptive[[cluster]]<-mean(CI_adaptive_lower<=test_data$tau&test_data$tau<=CI_adaptive_upper)
 
-
+	#MSEs for the treatment effect
     MSE_linear[[model_est]]<-mean((test_data$tau-tauhat_linear)^2)
     MSE_honest[[cluster]]<-mean((test_data$tau-tauhat_honest)^2)
     MSE_adaptive[[cluster]]<-mean((test_data$tau-tauhat_adaptive)^2)
+    
+    #some preparation for the plot data
         
     if (model_est=='medium_misspecified'){
             tauhat_linear_misspecified<-tauhat_linear
@@ -414,116 +428,56 @@ return(list("MSE Low Complexity Estimated Linear Model"=MSE_linear[['simple']],
             "MSE High Complexity Estimated Linear Model"=MSE_linear[['complex']],
             "MSE Honest, Cluster-Robust CF"=MSE_honest[['Yes']],
             "MSE Honest, not Cluster-Robust CF"=MSE_honest[['No']],
-            "MSE Adaptive, Cluster-Robust CF"=MSE_adaptive[['Yes']],
+            "MSE Adaptive, Clustered CF"=MSE_adaptive[['Yes']],
+            "MSE Adaptive, not Clustered CF"=MSE_adaptive[['No']],
             "Coverage Probability Honest, Cluster-Robust CF"=coverage_honest[['Yes']],
             "Coverage Probability Honest, not Cluster-Robust CF"=coverage_honest[['No']],
             complete_data=complete_data))
 }
 
 table_function<-function(observations, n_test, models, n.trees, N_clusters){
+	
+	#arguments: -observations: sequence number of training observations
+	#			- n_test: number of test observations
+	#			- models: the true data generating processes
+	#			- n.trees: number of trees
+	#			- N_clusters: number of clusters
+	#returns: 	- dataframe with MSEs and coverage probablities
 
-mylist <- list()
-MSE_df <- data.frame()
-this<-matrix()
-for (n in observations){
-for (model in models){
-    mylist[[sprintf("True model: %s. %s", model, n)]]<-MSE_function(n_test=n_test, n_train=n, n.trees=n.trees, model_true=model, N_clusters=N_clusters)[1:9]
-    MSE_df <- do.call("cbind",mylist)
-}
-}
+	mylist <- list()
+	MSE_df <- data.frame()
+	this<-matrix()
+	for (n in observations){
+		for (model in models){
+    		mylist[[sprintf("True model: %s. Training observations: %s", model, n)]]<-MSE_function(n_test=n_test, n_train=n, n.trees=n.trees, model_true=model, N_clusters=N_clusters)[1:10]
+    		MSE_df <- do.call("cbind",mylist)
+		}
+	}
     return(MSE_df)
 }
 
-plot_coverage_function<-function(n_test, n_train, n.trees, trees, observations){
-dataf<-data.frame(
-num_trees=NA,
-cluster=NA,
-nocluster=NA)
-#coverage_prob<-list()
-for (i in index(trees)){
-    element<-trees[i]
-    coverage<-MSE_function(n_test=n_test, n_train=n_train, n.trees=element, 
-                           model_true='simple', N_clusters=150)[c("Coverage Probability Honest, Cluster-Robust CF", 
-                                                  "Coverage Probability Honest, not Cluster-Robust CF")]
-    #coverage_prob[[i]]<-rbind(element, "cluster"=coverage[1],"nocluster"=coverage[2])
-    #dataf <- do.call("cbind", data.frame(coverage_prob))
-    dataf[i,"num_trees"]<-element
-    dataf[i,"cluster"]<-coverage[1]
-    dataf[i,"no_cluster"]<-coverage[2]
-    }
 
-p1<-ggplot(dataf, aes(trees)) + 
-  geom_line(aes(y = cluster, color = "cluster"))+
-  geom_line(aes(y=no_cluster, color = "no_cluster"))+
-  geom_point(aes(y = cluster, color = "cluster"))+
-  geom_point(aes(y=no_cluster, color = "no_cluster"))+
-  xlab('Log of number of trees')+
-  ylab('Coverage Probability')+
-  labs(x = 'Log of number of trees',
-         y = 'Coverage Probability',
-         color = "Legend")+
-  scale_x_continuous(breaks = c(trees), trans = scales::log_trans())+
-  geom_hline(yintercept= 0.9, size=0.3, linetype = "dashed", color='red')+
-  scale_color_manual(values = c('cluster' = 'turquoise',
-                                  'no_cluster' = 'black'))+
-    ylim(0.6, 1)+
-    ggtitle('Coverage: Different Number of Trees')+
-    theme(plot.title = element_text(size = 10))
-    
-legend<-get_legend(p1)
+figure1<-function(n_test, n_train, n.trees=n.trees, model, N_clusters){
+	
+	#arguments:		-n_test: number of test observations
+	#				-n_train: number of training observations
+	#				-n.trees: number of trees
+	#				-model: the dgp
+	#				- N_clusteres: the number of clusters
+	#returns:		- plot illustrating advantage of nonparametric estimation when the dgp is unknown
 
-p1<- p1 + theme(legend.position="none")
+	#getting plot data
+	plot_data<-MSE_function(n_test=n_test, n_train=n_train, n.trees=n.trees, model_true=model, N_clusters=N_clusters)$complete_data
+	#restricting values to be displayed
+	plot_data<-plot_data[!(plot_data$head_salary>14| plot_data$totalallocation>180),]
 
+	#specifying range of tau values
+	minimum<-min(plot_data$tau, plot_data$tauhat_honest, plot_data$tauhat_linear, 	plot_data$tauhat_linear_misspecified)
+	maximum<-max(plot_data$tau, plot_data$tauhat_honest, plot_data$tauhat_linear, plot_data$tauhat_linear_misspecified)
+	
+	#plotting the true tau and three estimated functions of tau(x)
 
-dataf<-data.frame(
-num_observations=NA,
-cluster=NA,
-nocluster=NA)
-#coverage_prob<-list()
-for (i in index(observations)){
-    element<-observations[i]
-    coverage<-MSE_function(n_test=n_test, n_train=element, n.trees=n.trees, model_true='simple', N_clusters=150)[c("Coverage Probability Honest, Cluster-Robust CF", 
-                                                  "Coverage Probability Honest, not Cluster-Robust CF")]
-    #coverage_prob[[i]]<-rbind(element, "cluster"=coverage[1],"nocluster"=coverage[2])
-    #dataf <- do.call("cbind", data.frame(coverage_prob))
-    dataf[i,"num_observations"]<-element
-    dataf[i,"cluster"]<-coverage[1]
-    dataf[i,"no_cluster"]<-coverage[2]
-    }
-
-p2<-ggplot(dataf, aes(observations)) + 
-  geom_line(aes(y = cluster, colour = "cluster"))+
-  geom_line(aes(y = no_cluster, colour= "no_cluster"))+
-  geom_point(aes(y = cluster, colour = "cluster"))+
-  geom_point(aes(y = no_cluster, colour= "no_cluster"))+
-  xlab('Log of number of observations')+
-  ylab('Coverage Probability')+
-  scale_x_continuous(breaks = c(observations), trans = scales::log_trans())+
-  theme(legend.position="none")+
-  scale_colour_manual(values = c('cluster' = 'turquoise',
-                                  'no_cluster' = 'black'))+
-  geom_hline(yintercept=0.9, size=0.3, linetype="dashed", 
-                color = "red")+
-    ylim(0.6, 1)+
-    ggtitle('Coverage: Different Number of Observations')+
-    theme(plot.title = element_text(size = 10))
-
-grid.arrange(p1, p2, legend, ncol=2, nrow = 2, 
-             layout_matrix = rbind(c(1,2), c(3,3)),
-             widths = c(2.7, 2.7), heights = c(2.5, 0.5))
-
-}
-
-figure2<-function(n_test, n_train, n.trees=n.trees, model, N_clusters){
-
-plot_data<-MSE_function(n_test=n_test, n_train=n_train, n.trees=n.trees, model_true=model, N_clusters=N_clusters)$complete_data
-plot_data<-plot_data[!(plot_data$head_salary>14| plot_data$totalallocation>180),]
-
-
-minimum<-min(plot_data$tau, plot_data$tauhat_honest, plot_data$tauhat_linear, plot_data$tauhat_linear_misspecified)
-maximum<-max(plot_data$tau, plot_data$tauhat_honest, plot_data$tauhat_linear, plot_data$tauhat_linear_misspecified)
-
-p1<-ggplot(plot_data, aes(head_salary, totalallocation))+
+	p1<-ggplot(plot_data, aes(head_salary, totalallocation))+
     geom_point(aes(colour = tau)) +
     scale_colour_gradientn(colours = terrain.colors(10),limits=c(minimum, maximum))+
     ggtitle(TeX('Medium Complexity Model: True Effect $\\tau(x)$'))+
@@ -532,25 +486,25 @@ p1<-ggplot(plot_data, aes(head_salary, totalallocation))+
 
 
 
-legend <- get_legend(p1)
+	legend <- get_legend(p1)
 
-p1<- p1 + theme(legend.position="none")
+	p1<- p1 + theme(legend.position="none")
 
-p2<-ggplot(plot_data, aes(head_salary, totalallocation))+
+	p2<-ggplot(plot_data, aes(head_salary, totalallocation))+
     geom_point(aes(colour = tauhat_honest)) +
     scale_colour_gradientn(colours = terrain.colors(10), limits=c(minimum,maximum))+
     theme(legend.position="none")+
     ggtitle('Estimate from Honest Cluster-Robust\n Causal Forest')+
     theme(plot.title = element_text(size = 10))
 
-p3<-ggplot(plot_data, aes(head_salary, totalallocation))+
+	p3<-ggplot(plot_data, aes(head_salary, totalallocation))+
     geom_point(aes(colour = tauhat_linear)) +
     scale_colour_gradientn(colours = terrain.colors(10), limits=c(minimum,maximum))+
     theme(legend.position="none")+
     ggtitle('Estimate from Medium Complexity \n Linear Model')+
     theme(plot.title = element_text(size = 10))
 
-p4<-ggplot(plot_data, aes(head_salary, totalallocation))+
+	p4<-ggplot(plot_data, aes(head_salary, totalallocation))+
     geom_point(aes(colour = tauhat_linear_misspecified)) +
     scale_colour_gradientn(colours = terrain.colors(10), limits=c(minimum,maximum))+
     theme(legend.position="none")+
@@ -558,50 +512,54 @@ p4<-ggplot(plot_data, aes(head_salary, totalallocation))+
     theme(plot.title = element_text(size = 10))
 
 
-grid.arrange(p1, p2, p3, p4, legend, ncol=3, nrow = 2, 
+	grid.arrange(p1, p2, p3, p4, legend, ncol=3, nrow = 2, 
              layout_matrix = cbind(c(1,2), c(3,4), c(5,5)),
              widths = c(2.5, 2.5, 0.5), heights = c(2.5,2.5))
     }
     
 cf_empirical_function<-function(dataset1, dataset2){
+	
+	#arguments: 	-dataset1: randomization_data
+	#				-dataset2: road_data
+	#returns:		- list with ATEs, predictions, dataframe and variable importance
+	
+	
+	#merge data
+	merged_data<-merge(dataset1, dataset2, by="desaid")
+	merged_data<-merged_data[!is.na(merged_data$lndiffeall4mainancil),]
+	merged_data$desaid<-as.numeric(merged_data$desaid)
 
-merged_data<-merge(dataset1, dataset2, by="desaid")
-merged_data<-merged_data[!is.na(merged_data$lndiffeall4mainancil),]
-merged_data$desaid<-as.numeric(merged_data$desaid)
+	merged_data<-as.data.frame(merged_data)
 
-merged_data<-as.data.frame(merged_data)
-
-merged_data<-rename(merged_data, c("zdistancekec"="distance", "zkadesedyears"="head_education_years", "zpop"="population",
-                     "zpercentpoorpra"="percentage_poor", "zkadesbengkoktotal"="head_salary", "zkadesage"="head_age",
-                      "podeszhill"="mountainous", "totalmesjid"="mosques", "audit.x"="audit", "kecnum.x"="subdistrict", 
+	merged_data<-rename(merged_data, c("zdistancekec"="distance", "zkadesedyears"="head_education_years", 	"zpop"="population",
+                     "zpercentpoorpra"="percentage_poor", "zkadesbengkoktotal"="head_salary", 	"zkadesage"="head_age",
+                      "podeszhill"="mountainous", "totalmesjid"="mosques", "audit.x"="audit", 	"kecnum.x"="subdistrict", 
                      "lndiffeall4mainancil"="ln_diff_items", "z4RABnumsubproj"="subprojects"))
-covariates<-c('distance', 'head_education_years', 'population', 'percentage_poor', 'head_salary',
+                     
+    #specifying covariates
+	covariates<-c('distance', 'head_education_years', 'population', 'percentage_poor', 'head_salary',
               'head_age', 'mountainous', 'mosques', 'subprojects')
+   	
+   	#grow forest
 
-X=merged_data[,covariates]
-cf_honest_clustered<-causal_forest(X=X, Y=merged_data$ln_diff_items, W=merged_data$audit, clusters=merged_data$subdistricts, tune.parameters=mtry, seed=1)
-cf_honest_not_clustered<-causal_forest(X=X, Y=merged_data$ln_diff_items, W=merged_data$audit, tune.parameters=mtry, seed=1)
-cf_adaptive<-causal_forest(X=X, Y=merged_data$ln_diff_items, W=merged_data$audit, honesty=FALSE, tune.parameteters=mtry, seed=1)
+	X=merged_data[,covariates]
+	cf_honest_clustered<-causal_forest(X=X, Y=merged_data$ln_diff_items, W=merged_data$audit, 	clusters=merged_data$subdistricts, tune.parameters='mtry', seed=1)
+	cf_honest_not_clustered<-causal_forest(X=X, Y=merged_data$ln_diff_items, W=merged_data$audit, 	tune.parameters='mtry', seed=1)
+	cf_adaptive<-causal_forest(X=X, Y=merged_data$ln_diff_items, W=merged_data$audit, honesty=FALSE, 	tune.parameters='mtry', seed=1)
     
-variable_importance_honest_clustered=variable_importance(cf_honest_clustered)
-variable_importance_adaptive=variable_importance(cf_adaptive)
-#tau_hat_clustered = predict(cf_clustered)$predictions
-#hist(tau_hat_clustered)
-#tau_hat_not_clustered = predict(cf_not_clustered)$predictions
-#hist(tau_hat_not_clustered)
+	variable_importance_honest_clustered=variable_importance(cf_honest_clustered)
+	variable_importance_adaptive=variable_importance(cf_adaptive)
 
-#sd(tau_hat_clustered)
-#sd(tau_hat_not_clustered)
 
-ATE_honest_clustered<-average_treatment_effect(cf_honest_clustered)
-ATE_honest_not_clustered<-average_treatment_effect(cf_honest_not_clustered)
-ATE_adaptive<-average_treatment_effect(cf_adaptive)
+	ATE_honest_clustered<-average_treatment_effect(cf_honest_clustered)
+	ATE_honest_not_clustered<-average_treatment_effect(cf_honest_not_clustered)
+	ATE_adaptive<-average_treatment_effect(cf_adaptive)
 
-tauhat_honest_clustered<-predict(cf_honest_clustered)$predictions
-tauhat_honest_not_clustered<-predict(cf_honest_not_clustered)$predictions
-tauhat_adaptive<-predict(cf_adaptive)$predictions
+	tauhat_honest_clustered<-predict(cf_honest_clustered)$predictions
+	tauhat_honest_not_clustered<-predict(cf_honest_not_clustered)$predictions
+	tauhat_adaptive<-predict(cf_adaptive)$predictions
 
-return(list(ATE_honest_clustered=ATE_honest_clustered, ATE_honest_not_clustered=ATE_honest_not_clustered,
+	return(list(ATE_honest_clustered=ATE_honest_clustered, ATE_honest_not_clustered=ATE_honest_not_clustered,
             ATE_adaptive=ATE_adaptive, tauhat_honest_clustered=tauhat_honest_clustered, 
            tauhat_honest_not_clustered=tauhat_honest_not_clustered, 
            tauhat_adaptive=tauhat_adaptive, cf_honest_clustered=cf_honest_clustered, 
@@ -612,52 +570,69 @@ return(list(ATE_honest_clustered=ATE_honest_clustered, ATE_honest_not_clustered=
 }
 
 ATE_function<-function(dataset1, dataset2){
-empirical_results<-cf_empirical_function(randomization_data, road_data)
-df<-data.frame()
+	
+	#arguments: -dataset1: randomization data
+	#			-dataset2: road data
+	# returns: dataframe with ATEs and standard errors
+	
+	empirical_results<-cf_empirical_function(randomization_data, road_data)
+	df<-data.frame()
 
-df['ATE','Honest cluster-robust CF']<-empirical_results$ATE_honest_clustered[1]
-df['Standard Error','Honest cluster-robust CF']<-empirical_results$ATE_honest_clustered[2]
-df['ATE','Honest non-cluster-robust CF']<-empirical_results$ATE_honest_not_clustered[1]
-df['Standard Error','Honest non-cluster-robust CF']<-empirical_results$ATE_honest_not_clustered[2]
-df['ATE', 'Adaptive non-cluster-robust CF']<-empirical_results$ATE_adaptive[1]
-df['Standard Error', 'Adaptive non-cluster-robust CF']<-empirical_results$ATE_adaptive[2]
+	df['ATE','Honest cluster-robust CF']<-empirical_results$ATE_honest_clustered[1]
+	df['Standard Error','Honest cluster-robust CF']<-empirical_results$ATE_honest_clustered[2]
+	df['ATE','Honest non-cluster-robust CF']<-empirical_results$ATE_honest_not_clustered[1]
+	df['Standard Error','Honest non-cluster-robust CF']<-empirical_results$ATE_honest_not_clustered[2]
+	df['ATE', 'Adaptive clustered CF']<-empirical_results$ATE_adaptive[1]
+	df['Standard Error', 'Adaptive clustered CF']<-empirical_results$ATE_adaptive[2]
     
     return(df)
 }
 
-boxplots<-function(forest, variable_importance){
-empirical_results=cf_empirical_function(randomization_data, road_data)
-cf=empirical_results[forest]
-X=empirical_results$X
-merged_data=empirical_results$merged_data
-variable_importance=unlist(empirical_results[variable_importance], use.names=FALSE)
-important_variables=which(variable_importance > mean(variable_importance))
+boxplots<-function(forest, variable_importance, dataset1, dataset2){
+	
+	#arguments:	forest: the causal forest considered
+	#			variable_importance: variable importance of the causal forest
+	#			dataset1: randomization_data
+	#			dataset2: road_data
+	#returns:	plots with CATEs
+	
+	#call empirical function and prepare for plotting
+				
+	empirical_results=cf_empirical_function(dataset1, dataset2)
+	cf=empirical_results[forest]
+	X=empirical_results$X
+	merged_data=empirical_results$merged_data
+	variable_importance=unlist(empirical_results[variable_importance], use.names=FALSE)
+	important_variables=which(variable_importance > mean(variable_importance))
 
-if (forest=='cf_honest_clustered'){
+	if (forest=='cf_honest_clustered'){
 
-cf_imp<-causal_forest(X=X[,important_variables], Y=merged_data$ln_diff_items,
-                      W=merged_data$audit, clusters=merged_data$subdistricts)
+	cf_imp<-causal_forest(X=X[,important_variables], Y=merged_data$ln_diff_items,
+                      W=merged_data$audit, clusters=merged_data$subdistricts, tune.parameters="mtry", seed=1)
     }
 
-if (forest=='cf_adaptive'){
+	if (forest=='cf_adaptive'){
 
-cf_imp<-causal_forest(X=X[,important_variables], Y=merged_data$ln_diff_items,
-                      W=merged_data$audit, tune.parameters="all")
+	cf_imp<-causal_forest(X=X[,important_variables], Y=merged_data$ln_diff_items,
+                      W=merged_data$audit, tune.parameters="mtry", seed=1)
     }
 
-tau_hat_clustered<-predict(cf_imp)$predictions
+	tau_hat_clustered<-predict(cf_imp)$predictions
 
-plot_data<-as.data.frame(cbind(X[,important_variables], tau_hat_clustered))
-names<-names(plot_data[,-(ncol(plot_data))])
-names
-p<-list()
-for (i in index(names)){
-    name<-names[i]
-    p[[i]]<-ggplot(plot_data, aes_string(x=plot_data[,name], y=tau_hat_clustered)) + 
+	plot_data<-as.data.frame(cbind(X[,important_variables], tau_hat_clustered))
+	names<-names(plot_data[,-(ncol(plot_data))])
+	
+	#creating list for plots
+	
+	p<-list()
+	for (i in index(names)){
+    	name<-names[i]
+    	p[[i]]<-ggplot(plot_data, aes_string(x=plot_data[,name], y=tau_hat_clustered)) + 
           geom_boxplot(aes(group = cut_width(plot_data[,name], ((min(plot_data[,name]))+(max(plot_data[,name])))/10)))+
             geom_smooth(se=FALSE)+
-    xlab(name)+
-    ylab('CATE')
-    }
-do.call(grid.arrange, c(p, ncol=2))
+    	xlab(name)+
+    	ylab('CATE')
+    	}
+    	#combine plots
+	do.call(grid.arrange, c(p, ncol=2))
     }
