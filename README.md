@@ -1,6 +1,6 @@
 # Computational Statistics Term Paper
 
-This repository includes the notebook, corresponding functions and datasets for my term paper. I recommend using NBViewer for viewing the notebook as equations may not be displayed properly otherwise. You can view the notebook by clicking on this badge:  
+This repository includes the notebook, corresponding functions and data sets for my term paper. I recommend using NBViewer for viewing the notebook as equations may not be displayed properly otherwise. You can view the notebook by clicking on this badge:  
 
 <a href="https://nbviewer.jupyter.org/github/gerwinkiessling/CompStat/blob/master/Project_Corruption.ipynb"
    target="_parent">
